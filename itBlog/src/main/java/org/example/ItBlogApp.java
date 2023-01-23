@@ -15,10 +15,8 @@ import java.util.concurrent.TimeoutException;
  * ИТ блог, публикует статьи по языкам программирования
  * (Producer/sender)
  */
-@Slf4j
 public class ItBlogApp {
 
-//    private final static String QUEUE_NAME = "it_blog"; // todo delete?
     private final static String EXCHANGER_NAME = "it_blog_exchanger";
 
     public static void main(String[] args) throws IOException, TimeoutException {

@@ -5,6 +5,7 @@ import com.rabbitmq.client.*;
 import java.io.IOException;
 import java.util.Scanner;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  *  Подписчик, при запуске пишет "set_topic php"
@@ -12,13 +13,11 @@ import java.util.concurrent.TimeoutException;
  *  (Consumer/receiver)
  */
 public class SubscriberApp {
-//    private final static String QUEUE_NAME = "it_blog"; // todo delete
     private final static String EXCHANGER_NAME = "it_blog_exchanger";
-
 
     public static void main(String[] args) throws IOException, TimeoutException {
         SubscriberApp subscriberApp = new SubscriberApp();
-        String topic = subscriberApp.readTopic();
+        AtomicReference<String> routingKey = new AtomicReference<>(subscriberApp.readKey());
 
         ConnectionFactory factory = new ConnectionFactory();
         factory.setHost("localhost");
@@ -29,10 +28,11 @@ public class SubscriberApp {
 
         String queueName = channel.queueDeclare().getQueue(); // просим канал создать очередь и дать ей имя
         System.out.println("My queue name: " + queueName);
-        System.out.println("Topic: " + topic);
-        channel.queueBind(queueName, EXCHANGER_NAME, topic); // делаем бинд на временную очередь
+        System.out.println("Topic: " + routingKey);
+        channel.queueBind(queueName, EXCHANGER_NAME, routingKey.get()); // делаем бинд на временную очередь
 
         System.out.println(" [*] Waiting for messages");
+
 
         DeliverCallback deliverCallback = (consumerTag, delivery) -> { // работает в отдельном потоке
             String message = new String(delivery.getBody(), "UTF-8");
@@ -42,11 +42,24 @@ public class SubscriberApp {
         channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {
         });
 
+        // читаем и устанавливаем новые поисковые ключи в процессе работы
+        Thread reader = new Thread(()->{
+            while (true){
+                routingKey.set(subscriberApp.readKey());
+                try {
+                    channel.queueBind(queueName, EXCHANGER_NAME, routingKey.get());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        reader.setDaemon(true);
+        reader.run();
     }
 
     // set_topic java
     // set_topic php
-    public String readTopic(){
+    public String readKey(){
         Scanner scanner = new Scanner(System.in);
         String line = scanner.nextLine();
         String[] split = line.trim().split(" ");
